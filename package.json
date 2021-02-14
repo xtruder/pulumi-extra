@@ -1,0 +1,27 @@
+{
+  "name": "pulumi-extra",
+  "version": "0.0.0",
+  "description": "Extra pulumi resources and utils",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "pulumi",
+    "utils",
+    "resources",
+    "kubernetes"
+  ],
+  "author": "Jaka Hudoklin <jaka@x-truder.net>",
+  "license": "MIT",
+  "dependencies": {
+    "@kubernetes/client-node": "^0.13.2",
+    "@pulumi/kubernetes": "^2.8.1",
+    "@pulumi/pulumi": "^2.20.0",
+    "@pulumi/tls": "^3.1.0",
+    "request-promise": "^4.2.6"
+  },
+  "devDependencies": {
+    "deep-equal": "^2.0.5"
+  }
+}

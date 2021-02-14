@@ -1,0 +1,48 @@
+version: '3'
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+        DOCKER_SOCKET_GIT: ${DOCKER_SOCKET_GID:-966}
+        PROJECT_DIR: /workspace
+    environment:
+      PATH: /home/user/.nix-profile/bin:/home/user/.local/bin:/usr/local/bin:/usr/bin:/bin
+      KUBECONFIG: /var/run/k3s-kubeconfig/kubeconfig.yaml
+    command: sleep infinity
+    volumes:
+      - ..:/workspace:cached
+      - kubeconfig:/var/run/k3s-kubeconfig
+      - nix:/nix
+      - direnv-allow:/home/user/.config/direnv/allow
+    security_opt:
+      - label:disable
+    network_mode: bridge
+
+  k3s:
+    image: "rancher/k3s:${K3S_VERSION:-latest}"
+    command: server
+    tmpfs:
+    - /run
+    - /var/run
+    privileged: true
+    environment:
+    - K3S_TOKEN=${K3S_TOKEN:-29338293525080}
+    - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
+    - K3S_KUBECONFIG_MODE=666
+    volumes:
+    - k3s-server:/var/lib/rancher/k3s
+    # This is just so that we get the kubeconfig file out
+    - kubeconfig:/output
+    security_opt:
+      - label:disable
+    network_mode: "service:dev"
+
+volumes:
+  nix:
+  direnv-allow:
+  k3s-server:
+  kubeconfig:

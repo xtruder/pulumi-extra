@@ -1,0 +1,4 @@
+name: tls-resource-test
+description: test for tls resource
+runtime: nodejs
+template:
