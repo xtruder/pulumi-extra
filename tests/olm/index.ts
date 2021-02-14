@@ -3,7 +3,9 @@ import * as k8s from '@pulumi/kubernetes';
 import { OperatorLifecycleManager, OperatorGroup, OperatorSubscription, waitK8SServiceIP, waitK8SCustomResourceCondition } from '../..';
 import { check } from '../utils';
 
-const olm = new OperatorLifecycleManager("olm", {});
+const provider = new k8s.Provider("k8s");
+
+const olm = new OperatorLifecycleManager("olm", {}, { provider });
 
 olm.chart.getResource("v1/Namespace", "olm").
     apply(ns => ns.metadata.name).
@@ -18,14 +20,14 @@ const namespace = new k8s.core.v1.Namespace("grafana", {}, { deleteBeforeReplace
 const operatorGroup = new OperatorGroup("grafana-group", {
     namespace: namespace.metadata.name,
     targetNamespaces: [namespace.metadata.name]
-});
+}, {provider});
 
 const operatorSubscription = new OperatorSubscription("grafana-operator", {
     namespace: namespace.metadata.name,
     channel: "alpha",
     operatorName: "grafana-operator",
     source: "operatorhubio-catalog"
-}, { dependsOn: [operatorGroup] });
+}, { dependsOn: [operatorGroup], provider });
 
 const grafanaInstance = new k8s.apiextensions.CustomResource("grafana", {
     apiVersion: "integreatly.org/v1alpha1",
@@ -67,24 +69,14 @@ const grafanaInstance = new k8s.apiextensions.CustomResource("grafana", {
             }
         ]
     }
-}, { dependsOn: [operatorSubscription] });
+}, { dependsOn: [operatorSubscription], provider });
 
-const provider = new k8s.Provider("k8s");
-
-const waitedGrafana = waitK8SCustomResourceCondition(grafanaInstance, "grafanas", resource => {
-    return resource.status.message == "success";
-}, provider);
-
-const wgetJob = new k8s.batch.v1.Job("call-grafana", {
+const wgetJob = new k8s.batch.v1.Job("wget-grafana", {
     metadata: {
-        name: "call-grafana",
         namespace: namespace.metadata.name
     },
     spec: {
         template: {
-            metadata: {
-                name: "call-grafana"
-            },
             spec: {
                 restartPolicy: "Never",
                 containers: [{
@@ -95,6 +87,13 @@ const wgetJob = new k8s.batch.v1.Job("call-grafana", {
             }
         },
     }
-}, { dependsOn: [ waitedGrafana ]});
+}, {
+    dependsOn: [
+        waitK8SCustomResourceCondition(grafanaInstance, "grafanas", resource => {
+            return resource.status.message == "success";
+        }, provider)
+    ],
+    provider
+});
 
 wgetJob.status.succeeded.apply(check(1, wgetJob));
