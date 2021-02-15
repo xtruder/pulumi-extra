@@ -1,0 +1,4 @@
+name: grafana-operator
+description: test for grafana operator and associated resources
+runtime: nodejs
+template:

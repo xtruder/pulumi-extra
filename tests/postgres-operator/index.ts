@@ -3,7 +3,6 @@ import * as k8s from '@pulumi/kubernetes';
 import * as random from '@pulumi/random';
 
 import { OperatorLifecycleManager, OperatorGroup, PostgresOperator, PostgresCluster, RootSigningCertificate } from '../..';
-import { check } from '../utils';
 
 const ca = new RootSigningCertificate("ca", {});
 
