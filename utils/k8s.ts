@@ -91,12 +91,12 @@ export function waitK8SServiceIP(
         });
 }
 
-export function waitK8SCustomResourceCondition<T extends k8sResource>(
+export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.CustomResource>(
     resource: T,
     resourceName: pulumi.Input<string>,
     check: (v: any) => boolean,
     provider: k8s.Provider
-) {
+): T {
     if (pulumi.runtime.isDryRun()) {
         return resource;
     }
@@ -126,5 +126,5 @@ export function waitK8SCustomResourceCondition<T extends k8sResource>(
 
                 await new Promise(r => setTimeout(r, 2000));
             }
-        });
+        }) as any;
 }

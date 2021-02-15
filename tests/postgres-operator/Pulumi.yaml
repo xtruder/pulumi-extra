@@ -1,0 +1,4 @@
+name: postgres-operator-test
+description: test for postgres operator and associated resources
+runtime: nodejs
+template:

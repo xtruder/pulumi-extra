@@ -8,7 +8,7 @@ Pulumi extra resource and utils
 cd tests/<test-name>
 pulumi login --local
 pulumi stack init <test-name>
-pulumi up
+pulumi up --yes --non-interactive
 pulumi destroy
 ```
 

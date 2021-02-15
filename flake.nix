@@ -14,6 +14,7 @@
           pulumi-bin
           kubectl
           nodejs
+          postgresql
         ];
 
         shellHook = ''

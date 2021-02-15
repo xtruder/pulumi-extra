@@ -1,4 +1,4 @@
-import { RootSigningCertificate, defaultValidityPeriodHours } from '../../';
+import { RootSigningCertificate, defaultValidityPeriodHours } from '../..';
 import { check } from '../utils';
 
 /*** minimal CA and cert */
