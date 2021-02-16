@@ -8,6 +8,7 @@ import { includeK8SResourceParams, removeK8SResourceParams } from '../../';
 
 interface OperatorLifecycleManagerArgs {
     namespace?: pulumi.Input<string>;
+    operatorsNamespace?: pulumi.Input<string>;
     imageRef?: pulumi.Input<string>;
 }
 
@@ -19,13 +20,14 @@ export class OperatorLifecycleManager extends pulumi.ComponentResource {
 
         let {
             namespace = "olm",
+            operatorsNamespace: operatorNamespace = "operators",
             imageRef = "quay.io/operator-framework/olm@sha256:de396b540b82219812061d0d753440d5655250c621c753ed1dc67d6154741607",
         } = args;
 
         let values = {
             namespace: namespace,
             catalog_namespace: namespace,
-            operator_namespace: `${name}-operators`,
+            operator_namespace: operatorNamespace,
             olm: { image: { ref: imageRef} },
             package: { image: { ref: imageRef } },
         };
