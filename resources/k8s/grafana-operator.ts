@@ -31,7 +31,7 @@ export class GrafanaOperator extends pulumi.ComponentResource {
 
 interface GrafanaArgs {
     namespace: pulumi.Input<string>;
-    values?: object;
+    extraConfig?: object;
 }
 
 export class Grafana extends pulumi.ComponentResource {
@@ -42,7 +42,7 @@ export class Grafana extends pulumi.ComponentResource {
 
         let {
             namespace,
-            values = {}
+            extraConfig = {}
         } = args;
 
         const overwriteMerge = (_destinationArray, sourceArray) => sourceArray;
@@ -80,7 +80,7 @@ export class Grafana extends pulumi.ComponentResource {
                     ]
                 }
             ]
-        }, values, { arrayMerge: overwriteMerge });
+        }, extraConfig, { arrayMerge: overwriteMerge });
 
         // only one grafana per namespace is currently supported
         const grafana = new k8s.apiextensions.CustomResource("grafana", {
