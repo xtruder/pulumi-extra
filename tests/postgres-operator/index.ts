@@ -1,6 +1,7 @@
 import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
 import * as random from '@pulumi/random';
+import * as postgresql from '@pulumi/postgresql';
 
 import { OperatorLifecycleManager, OperatorGroup, PostgresOperator, PostgresCluster, RootSigningCertificate } from '../..';
 
@@ -54,6 +55,56 @@ const pgCluster = new PostgresCluster("postgres-cluster", {
     }
 }, { dependsOn: [ operator ], provider });
 
+const psqlProvider = new postgresql.Provider("postgresql", {
+    host: pgCluster.clusterIP,
+    port: 5432,
+    username: "postgres",
+    password: pgCluster.postgresPassword,
+    sslmode: "require"
+}, { dependsOn: [pgCluster]});
+
+const db = new postgresql.Database("testdb", {}, { provider: psqlProvider });
+
+new postgresql.Grant("testdb-grant-user-database-connect-temp", {
+    database: db.name,
+    role: pgCluster.username,
+    objectType: "database",
+    privileges: ["CONNECT", "TEMPORARY"]
+}, { provider: psqlProvider });
+
+new postgresql.Grant(`testdb-grant-user-schema-all`, {
+    database: db.name,
+    role: pgCluster.username,
+    schema: "public",
+    objectType: "schema" as string,
+    privileges: ["CREATE", "USAGE"],
+}, { provider: psqlProvider });
+
+for (const [objectType, privileges] of [
+    ["table", ["UPDATE", "REFERENCES", "TRUNCATE", "SELECT", "DELETE", "TRIGGER", "INSERT"]],
+    ["sequence", ["UPDATE", "SELECT", "USAGE"]],
+    ["function", ["EXECUTE"]],
+]) {
+    new postgresql.DefaultPrivileges(`testdb-default-grant-user-${objectType}-all`, {
+        database: db.name,
+        schema: "public",
+        owner: "postgres",
+        role: pgCluster.username,
+        objectType: objectType as string,
+        privileges: privileges as string[]
+    }, {provider: psqlProvider})
+}
+
+new postgresql.Grant("testdb-revoke-public", {
+    database: db.name,
+    role: "public",
+    schema: "public",
+    objectType: "schema",
+    privileges: []
+}, { provider: psqlProvider });
+
+export const testdb = db.name;
+export const clusterIP = pgCluster.clusterIP;
 export const postgresPassword = pgCluster.postgresPassword;
 export const username = pgCluster.username;
 export const password = pgCluster.password;

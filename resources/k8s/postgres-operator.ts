@@ -7,7 +7,7 @@ import * as random from '@pulumi/random';
 
 import { filesDir } from './util';
 import { OperatorSubscription } from './olm';
-import { waitK8SCustomResourceCondition } from '../../utils';
+import { waitK8SCustomResourceCondition, waitK8SServiceIP } from '../../utils';
 
 interface PostgresOperatorArgs {
     namespace: pulumi.Input<string>;
@@ -73,6 +73,7 @@ export class PostgresCluster extends pulumi.ComponentResource {
     public readonly cluster: k8s.apiextensions.CustomResource;
     public readonly replicas: k8s.apiextensions.CustomResource[] = [];
 
+    public readonly clusterIP: pulumi.Output<string>;
     public readonly postgresPassword: pulumi.Output<string>;
     public readonly username: pulumi.Output<string>;
     public readonly password: pulumi.Output<string>;
@@ -309,6 +310,8 @@ export class PostgresCluster extends pulumi.ComponentResource {
         this.cluster = waitK8SCustomResourceCondition(pgCluster, "pgclusters", resource => {
             return resource?.status?.state == "pgcluster Initialized";
         }, opts.provider);
+
+        this.clusterIP = waitK8SServiceIP(namespace, clusterName, opts.provider);
 
         let {
             count: replicaCount = 0

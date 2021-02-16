@@ -15,6 +15,7 @@
           kubectl
           nodejs
           postgresql
+          jq
         ];
 
         shellHook = ''
