@@ -1,6 +1,6 @@
 import * as k8s from '@pulumi/kubernetes';
 
-import { OperatorLifecycleManager, OperatorGroup, OperatorSubscription, waitK8SServiceIP, waitK8SCustomResourceCondition } from '../..';
+import { OperatorLifecycleManager, OperatorGroup, OperatorSubscription, waitK8SCustomResourceCondition } from '../..';
 import { check } from '../utils';
 
 const provider = new k8s.Provider("k8s");

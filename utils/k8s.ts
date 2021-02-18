@@ -63,32 +63,89 @@ function getKubeconfig(kubeConfig: string): k8sClient.KubeConfig {
     return kc;
 }
 
-export function waitK8SServiceIP(
-    namespace: pulumi.Input<string>,
+type ApiConstructor<T extends k8sClient.ApiType> = new (server: string) => T;
+
+export function waitK8SResource<T extends k8sClient.ApiType, R>({
+    namespace,
+    name,
+    kind,
+    provider,
+    apiType,
+    read,
+    resource
+}: {
+    namespace?: pulumi.Input<string>,
     name: pulumi.Input<string>,
-    provider: k8s.Provider
-) {
+    kind: string,
+    provider?: k8s.Provider,
+    apiType: ApiConstructor<T>,
+    read: (api: T, name: string, namespace?: string) => Promise<{body: R}> | undefined,
+    resource?: pulumi.Resource
+}): pulumi.Output<R> {
     const kubeConfig = (provider as any).kubeconfig as pulumi.Output<string>;
 
-    return pulumi.all([kubeConfig, namespace, name]).apply(
-        async ([kubeConfig, namespace, name]) => {
+    return pulumi.all([kubeConfig, namespace, name, resource]).apply(
+        async ([kubeConfig, namespace, name, resource]) => {
             const kc = getKubeconfig(kubeConfig);
-            const k8sApi = kc.makeApiClient(k8sClient.CoreV1Api);
+            const api = kc.makeApiClient<T>(apiType);
 
             while (true) {
                 try {
-                    const { body } = await k8sApi.readNamespacedService(name, namespace);
+                    pulumi.log.debug(`Waiting for ${kind} "${namespace}/${name}" ...`, resource);
 
-                    if (body.spec?.clusterIP) {
-                        return body.spec.clusterIP;
+                    let result = await read(api, name, namespace);
+
+                    if (!result) {
+                        continue;
                     }
+
+                    return result.body;
                 } catch (err) {
-                    pulumi.log.warn("error requesting service: " + err?.message)
+                    if (pulumi.runtime.isDryRun()) {
+                        return;
+                    }
+
+                    pulumi.log.warn(`error requesting k8s ${kind} "${namespace ? `${namespace}/${name}`: name}": ` + err?.message, resource)
                 }
 
                 await new Promise(r => setTimeout(r, 2000));
             }
-        });
+        }
+    );
+}
+
+export function waitK8SService(
+    namespace: pulumi.Input<string>,
+    name: pulumi.Input<string>,
+    provider: k8s.Provider,
+    resource?: pulumi.Resource
+) {
+    return waitK8SResource({
+        namespace,
+        name,
+        kind: "service",
+        provider,
+        resource,
+        apiType: k8sClient.CoreV1Api,
+        read: (api, name, namespace) => api.readNamespacedService(name, namespace)
+    });
+}
+
+export function waitK8SSecret(
+    namespace: pulumi.Input<string>,
+    name: pulumi.Input<string>,
+    provider: k8s.Provider,
+    resource?: pulumi.Resource
+) {
+    return waitK8SResource({
+        namespace,
+        name,
+        kind: "secret",
+        provider,
+        resource,
+        apiType: k8sClient.CoreV1Api,
+        read: (api, name, namespace) => api.readNamespacedSecret(name, namespace)
+    });
 }
 
 export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.CustomResource>(
@@ -112,7 +169,7 @@ export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.Custo
 
             while (true) {
                 try {
-                    pulumi.log.info('Waiting for resource...', resource);
+                    pulumi.log.debug(`Waiting for ${resourceName} "${namespace}/${name}" ...`, resource);
 
                     const url = `${kc.getCurrentCluster()?.server}/apis/${apiVersion}/namespaces/${namespace}/${resourceName}/${name}`;
                     const body = await request.get(url, opts);
@@ -121,7 +178,7 @@ export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.Custo
                         return resource;
                     }
                 } catch (err) {
-                    pulumi.log.warn("error requesting resource: " + err?.message, resource)
+                    pulumi.log.warn(`error requesting ${resourceName} "${namespace}/${name}: ` + err?.message, resource)
                 }
 
                 await new Promise(r => setTimeout(r, 2000));
