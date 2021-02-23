@@ -16,11 +16,26 @@ services:
     volumes:
       - ..:/workspace:cached
       - kubeconfig:/var/run/k3s-kubeconfig
+      - pulumi:/home/user/.pulumi
       - nix:/nix
       - direnv-allow:/home/user/.config/direnv/allow
     security_opt:
       - label:disable
-    network_mode: bridge
+    depends_on:
+      - k3s
+      - dnsmasq
+    network_mode: "service:k3s"
+
+  dnsmasq:
+    image: andyshinn/dnsmasq
+    cap_add:
+      - NET_ADMIN
+    volumes:
+    - ./resolv.conf:/run/resolv.conf
+    command: --log-facility=- -r /run/resolv.conf -S /cluster.local/10.43.0.10
+    security_opt:
+      - label:disable
+    network_mode: "service:k3s"
 
   k3s:
     image: "rancher/k3s:${K3S_VERSION:-latest}"
@@ -33,16 +48,24 @@ services:
     - K3S_TOKEN=${K3S_TOKEN:-29338293525080}
     - K3S_KUBECONFIG_OUTPUT=/output/kubeconfig.yaml
     - K3S_KUBECONFIG_MODE=666
+    - K3S_RESOLV_CONF=/run/k3s/resolv.conf
     volumes:
     - k3s-server:/var/lib/rancher/k3s
     # This is just so that we get the kubeconfig file out
     - kubeconfig:/output
+    - ./resolv.conf:/run/k3s/resolv.conf
     security_opt:
       - label:disable
-    network_mode: "service:dev"
+    network_mode: bridge
+    dns:
+      - 127.0.0.1
+    dns_search:
+      - svc.cluster.local
+      - cluster.local
 
 volumes:
   nix:
   direnv-allow:
   k3s-server:
   kubeconfig:
+  pulumi:

@@ -16,6 +16,14 @@
           nodejs
           postgresql
           jq
+          jre
+          (apacheKafka.overrideDerivation (p: rec {
+            version = "2.13-2.7.0";
+            src = pkgs.fetchurl {
+              url = "mirror://apache/kafka/2.7.0/kafka_${version}.tgz";
+              sha256 = "sha256-HdhLdjZ2oC/stI+l1+fpSivyvp/4e84UzxQQnOHLf5A=";
+            };
+          }))
         ];
 
         shellHook = ''

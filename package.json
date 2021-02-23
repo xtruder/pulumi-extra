@@ -25,6 +25,7 @@
     "request-promise": "^4.2.6"
   },
   "devDependencies": {
+    "@types/request-promise": "^4.1.47",
     "deep-equal": "^2.0.5"
   }
 }

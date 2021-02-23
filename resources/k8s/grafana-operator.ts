@@ -3,6 +3,7 @@ import * as deepmerge from 'deepmerge';
 import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
 
+import { overwriteMerge, WithRequired } from '../util';
 import { OperatorSubscription } from './olm';
 import { waitK8SCustomResourceCondition } from '../../utils';
 
@@ -37,15 +38,13 @@ interface GrafanaArgs {
 export class Grafana extends pulumi.ComponentResource {
     public readonly grafana: k8s.apiextensions.CustomResource;
 
-    constructor(args: GrafanaArgs, opts?: pulumi.ComponentResourceOptions) {
+    constructor(args: GrafanaArgs, opts: WithRequired<pulumi.ComponentResourceOptions, 'provider'>) {
         super("pulumi-extra:k8s:Grafana", "grafana", {}, opts);
 
         let {
             namespace,
             extraConfig = {}
         } = args;
-
-        const overwriteMerge = (_destinationArray, sourceArray) => sourceArray;
 
         let spec = deepmerge({
             "ingress": {

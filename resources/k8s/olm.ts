@@ -42,7 +42,9 @@ export class OperatorLifecycleManager extends pulumi.ComponentResource {
             ]
         }, { parent: this });
 
-        // include only packageserver
+        // include only packageserver, this needs to installed separately,
+        // as there is an issue with apsiservices not being delete
+        // see: https://github.com/operator-framework/operator-lifecycle-manager/issues/1304
         new k8s.helm.v3.Chart(`${name}-packageserver`, {
             path: chartPath, values,
             transformations: [

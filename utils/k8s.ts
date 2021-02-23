@@ -7,7 +7,7 @@ import * as request from 'request-promise';
 
 // removes kubernetes resource if it matches condition
 export function removeK8SResourceCondition(condition: (obj: any) => boolean) {
-    return obj => {
+    return (obj: any) => {
         if(condition(obj)) {
             obj.apiVersion = "v1";
             obj.kind = "List";
@@ -79,9 +79,11 @@ export function waitK8SResource<T extends k8sClient.ApiType, R>({
     kind: string,
     provider?: k8s.Provider,
     apiType: ApiConstructor<T>,
-    read: (api: T, name: string, namespace?: string) => Promise<{body: R}> | undefined,
+    read:
+        ((api: T, name: string) => Promise<{body: R}> | undefined) |
+        ((api: T, name: string, namespace: string) => Promise<{body: R}> | undefined),
     resource?: pulumi.Resource
-}): pulumi.Output<R> {
+}): pulumi.Output<R | undefined> {
     const kubeConfig = (provider as any).kubeconfig as pulumi.Output<string>;
 
     return pulumi.all([kubeConfig, namespace, name, resource]).apply(
@@ -148,16 +150,14 @@ export function waitK8SSecret(
     });
 }
 
-export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.CustomResource>(
+export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.CustomResource >(
     resource: T,
     resourceName: pulumi.Input<string>,
     check: (v: any) => boolean,
     provider: k8s.Provider
-): T {
-    if (pulumi.runtime.isDryRun()) {
-        return resource;
-    }
-
+): T & {
+    resource: pulumi.Output<any>;
+} {
     const kubeConfig = (provider as any).kubeconfig as pulumi.Output<string>;
 
     return pulumi.all([kubeConfig, resource.apiVersion, resourceName, resource.metadata.namespace, resource.metadata.name]).apply(
@@ -175,9 +175,13 @@ export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.Custo
                     const body = await request.get(url, opts);
 
                     if (check(body)) {
-                        return resource;
+                        return {...resource, resource: body};
                     }
                 } catch (err) {
+                    if (pulumi.runtime.isDryRun()) {
+                        return {...resource, resource: pulumi.output(undefined)};
+                    }
+
                     pulumi.log.warn(`error requesting ${resourceName} "${namespace}/${name}: ` + err?.message, resource)
                 }
 
