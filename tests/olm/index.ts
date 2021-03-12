@@ -1,31 +1,31 @@
 import * as k8s from '@pulumi/kubernetes';
 
-import { OperatorLifecycleManager, OperatorGroup, OperatorSubscription, waitK8SCustomResourceCondition } from '../..';
+import { olm, waitK8SCustomResourceCondition } from '../..';
 import { check } from '../utils';
 
 const provider = new k8s.Provider("k8s");
 
-const olm = new OperatorLifecycleManager("olm", {}, { provider });
+const operator = new olm.Operator("olm", {}, { provider });
 
-olm.chart.getResource("v1/Namespace", "olm").
+operator.chart.getResource("v1/Namespace", "olm").
     apply(ns => ns.metadata.name).
-    apply(check("olm", olm));
+    apply(check("olm", operator));
 
-olm.chart.getResource("apps/v1/Deployment", "olm", "olm-operator").
+operator.chart.getResource("apps/v1/Deployment", "olm", "olm-operator").
     apply(deployment => deployment.metadata.name).
-    apply(check("olm-operator", olm));
+    apply(check("olm-operator", operator));
 
 const namespace = new k8s.core.v1.Namespace("grafana", {}, { deleteBeforeReplace: true });
 
-const operatorGroup = new OperatorGroup("grafana-group", {
+const operatorGroup = new olm.OperatorGroup("grafana-group", {
     namespace: namespace.metadata.name,
     targetNamespaces: [namespace.metadata.name]
 }, {provider});
 
-const operatorSubscription = new OperatorSubscription("grafana-operator", {
+const operatorSubscription = new olm.Subscription("grafana-operator", {
     namespace: namespace.metadata.name,
     channel: "alpha",
-    operatorName: "grafana-operator",
+    name: "grafana-operator",
     source: "operatorhubio-catalog"
 }, { dependsOn: [operatorGroup], provider });
 

@@ -1,3 +1,5 @@
 node_modules
 Pulumi.*test.yaml
 .direnv
+.pulumi
+telepresence.log

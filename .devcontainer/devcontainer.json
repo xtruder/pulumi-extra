@@ -16,8 +16,9 @@
 
   // Add the IDs of extensions you want installed when the container is created.
   "extensions": [
-    "bbenoist.nix"
-  ],
+	"bbenoist.nix",
+	"ms-kubernetes-tools.vscode-kubernetes-tools"
+],
 
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   "forwardPorts": [],

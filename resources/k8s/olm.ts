@@ -4,18 +4,19 @@ import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
 
 import { filesDir } from './util';
-import { includeK8SResourceParams, removeK8SResourceParams } from '../../';
+import { includeK8SResourceParams, removeK8SResourceParams, waitK8SCustomResourceCondition, CustomResourceWithBody } from '../../';
+import { WithRequired } from '../util';
 
-interface OperatorLifecycleManagerArgs {
+interface OperatorArgs {
     namespace?: pulumi.Input<string>;
     operatorsNamespace?: pulumi.Input<string>;
     imageRef?: pulumi.Input<string>;
 }
 
-export class OperatorLifecycleManager extends pulumi.ComponentResource {
+export class Operator extends pulumi.ComponentResource {
     public readonly chart: k8s.helm.v3.Chart;
 
-    constructor(name: string, args: OperatorLifecycleManagerArgs, opts?: pulumi.ComponentResourceOptions) {
+    constructor(name: string, args: OperatorArgs, opts?: pulumi.ComponentResourceOptions) {
         super("pulumi-extra:k8s:OperatorLifecycleManager", name, {}, opts);
 
         let {
@@ -42,7 +43,9 @@ export class OperatorLifecycleManager extends pulumi.ComponentResource {
             ]
         }, { parent: this });
 
-        // include only packageserver
+        // include only packageserver, this needs to installed separately,
+        // as there is an issue with apsiservices not being delete
+        // see: https://github.com/operator-framework/operator-lifecycle-manager/issues/1304
         new k8s.helm.v3.Chart(`${name}-packageserver`, {
             path: chartPath, values,
             transformations: [
@@ -82,44 +85,48 @@ export class OperatorGroup extends pulumi.ComponentResource {
     }
 }
 
-interface OperatorSubscriptionArgs {
-    name?: pulumi.Input<string>;
+interface SubscriptionArgs {
     namespace: pulumi.Input<string>;
     
     channel: pulumi.Input<string>;
-    operatorName: pulumi.Input<string>;
+    name?: pulumi.Input<string>;
     source: pulumi.Input<string>;
     sourceNamespace?: pulumi.Input<string>;
+    installPlanApproval?: pulumi.Input<"Manual" | "Automatic">;
+    startingCSV?: pulumi.Input<string>;
 }
 
-export class OperatorSubscription extends pulumi.ComponentResource {
+export class Subscription extends pulumi.ComponentResource {
     public readonly subscription: k8s.apiextensions.CustomResource;
 
-    constructor(resourceName: string, args: OperatorSubscriptionArgs, opts?: pulumi.ComponentResourceOptions) {
-        super("pulumi-extra:k8s:OperatorSubscription", resourceName, {}, opts);
+    constructor(name: string, args: SubscriptionArgs, opts: WithRequired<pulumi.ComponentResourceOptions, 'provider'>) {
+        super("pulumi-extra:k8s:OperatorSubscription", name, {}, opts);
 
         let {
-            name = resourceName,
             namespace,
             channel,
-            operatorName,
+            name: operatorName = name,
             source,
-            sourceNamespace = "olm"
+            sourceNamespace = "olm",
+            installPlanApproval = "Automatic",
+            startingCSV
         } = args;
 
-        this.subscription = new k8s.apiextensions.CustomResource(resourceName, {
+        this.subscription = new k8s.apiextensions.CustomResource(`${name}-subscription`, {
             apiVersion: "operators.coreos.com/v1alpha1",
             kind: "Subscription",
             metadata: {
-                name: name,
+                name: operatorName,
                 namespace: namespace
             },
             spec: {
                 channel,
                 name: operatorName,
                 source,
-                sourceNamespace
+                sourceNamespace,
+                installPlanApproval,
+                ...(startingCSV && {startingCSV})
             }
-        }, { parent: this });
+        }, { parent: this, deleteBeforeReplace: true });
     };
 }

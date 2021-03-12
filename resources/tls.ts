@@ -5,18 +5,38 @@ import * as tls from "@pulumi/tls";
 type KeyAlgorithm = "RSA" | "ECDSA";
 type EcdsaCurve = "P224" | "P256" | "P384" | "P521" | "P224";
 type RSABits = 1024 | 2048 | 4096;
+type AllowedUses =
+    "digital_signature" |
+    "content_commitment" |
+    "key_encipherment" |
+    "data_encipherment" |
+    "key_agreement" |
+    "cert_signing" |
+    "crl_signing" |
+    "encipher_only" |
+    "decipher_only" |
+    "any_extended" |
+    "server_auth" |
+    "client_auth" |
+    "code_signing" |
+    "email_protection" |
+    "ipsec_end_system" |
+    "ipsec_tunnel" |
+    "ipsec_user" |
+    "timestamping" |
+    "ocsp_signing";
 
 export const
     defaultKeyAlgorithm: KeyAlgorithm = "ECDSA",
     defaultEcdsaCurve: EcdsaCurve = "P256",
     defaultRSABits: RSABits = 4096,
     defaultValidityPeriodHours = 87600,
-    defaultCAAllowedUses = [
+    defaultCAAllowedUses: AllowedUses[] = [
         "key_encipherment",
         "digital_signature",
         "cert_signing",
     ],
-    defaultCertAllowedUses = [
+    defaultCertAllowedUses: AllowedUses[] = [
         "key_encipherment",
         "digital_signature"
     ];
@@ -42,9 +62,19 @@ interface CommonCertArgs {
      */
     readonly validityPeriodHours?: pulumi.Input<number>;
 
-    readonly allowedUses?: pulumi.Input<pulumi.Input<string>[]>;
+    /**
+     * List of certificate allowed uses
+     */
+    readonly allowedUses?: pulumi.Input<pulumi.Input<AllowedUses>[]>;
 
+    /**
+     * Certificate common name
+     */
     readonly commonName?: pulumi.Input<string>;
+
+    /**
+     * Name of certificate organization
+     */
     readonly organization?: pulumi.Input<string>;
 }
 
@@ -57,7 +87,6 @@ export interface CertificateArgs extends CommonCertArgs {
     readonly dnsNames?: pulumi.Input<pulumi.Input<string>[]>;
 }
 
-
 /**
  * A resource representing a root signing certificate for CA purposes.
  */
@@ -65,12 +94,8 @@ export class RootSigningCertificate extends pulumi.ComponentResource {
     public readonly privateKey: tls.PrivateKey;
     public readonly certificate: tls.SelfSignedCert;
 
-    private name: string;
-
-    constructor(name: string, args: RootSigningCertificateArgs, opts?: pulumi.ComponentResourceOptions) {
+    constructor(name: string, args?: RootSigningCertificateArgs, opts?: pulumi.ComponentResourceOptions) {
         super("pulumi-extra:tls:RootSigningCertificate", name, {}, opts);
-
-        this.name = name;
 
         const {
             commonName = name,
@@ -80,7 +105,7 @@ export class RootSigningCertificate extends pulumi.ComponentResource {
             keyAlgorithm = defaultKeyAlgorithm,
             validityPeriodHours = defaultValidityPeriodHours,
             allowedUses = defaultCAAllowedUses
-        } = args;
+        } = args || {};
 
         const defaultResourceOptions: pulumi.ResourceOptions = { parent:this };
 
@@ -124,12 +149,12 @@ export class RootSigningCertificate extends pulumi.ComponentResource {
         return this.certificate.certPem;
     }
 
-    newCert(name: string, args: Omit<CertificateArgs, 'caCert' | 'caPrivateKey'>) {
+    newCert(name: string, args: Omit<CertificateArgs, 'caCert' | 'caPrivateKey'>, opts?: pulumi.ComponentResourceOptions) {
         return new Certificate(name, {
             ...args,
             caCert: this.certificate,
             caPrivateKey: this.privateKey,
-        });
+        }, opts);
     }
 }
 
@@ -137,6 +162,7 @@ export class Certificate extends pulumi.ComponentResource {
     public readonly privateKey: tls.PrivateKey;
     public readonly csr: tls.CertRequest;
     public readonly certificate: tls.LocallySignedCert;
+    public readonly caCert: tls.SelfSignedCert;
 
     constructor(name: string, args: CertificateArgs, opts?: pulumi.ComponentResourceOptions) {
         super("pulumi-extra:tls:Certificate", name, {}, opts);
@@ -185,6 +211,8 @@ export class Certificate extends pulumi.ComponentResource {
             validityPeriodHours,
             allowedUses
         }, defaultResourceOptions);
+
+        this.caCert = caCert;
     }
 
     /**
@@ -199,5 +227,9 @@ export class Certificate extends pulumi.ComponentResource {
      */
     getCertificate(): pulumi.Output<string> {
         return this.certificate.certPem;
+    }
+
+    getCaCertPem(): pulumi.Output<string> {
+        return this.caCert.certPem;
     }
 }

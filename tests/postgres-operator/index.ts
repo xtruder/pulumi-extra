@@ -1,111 +1,135 @@
-import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
-import * as random from '@pulumi/random';
-import * as postgresql from '@pulumi/postgresql';
+import * as pulumi from '@pulumi/pulumi';
 
-import { OperatorLifecycleManager, OperatorGroup, PostgresOperator, PostgresCluster, RootSigningCertificate } from '../..';
+import { tls, postgresOperator } from '../..';
 
-const ca = new RootSigningCertificate("ca", {});
+const ca = new tls.RootSigningCertificate("ca", {});
 
 const provider = new k8s.Provider("k8s");
 
-const olm = new OperatorLifecycleManager("olm", {}, { provider });
+const namespace = new k8s.core.v1.Namespace("postgres", {}, { deleteBeforeReplace: true }).metadata.name;
 
-export const namespace = new k8s.core.v1.Namespace("postgres", {}, { provider }).metadata.name;
-
-const operatorGroup = new OperatorGroup("postgres-group", {
-    namespace: namespace,
-    targetNamespaces: [namespace]
-}, {dependsOn: [olm], provider});
-
-const genClusterSuffix = new random.RandomString("random", {
-    length: 8,
-    special: false,
-    upper: false
-});
-
-const clusterName = genClusterSuffix.result.apply(v => `postgres-${v}`);
-
-const cert = ca.newCert("postgres", {
-    commonName: clusterName,
-    dnsNames: [
-        clusterName,
-        pulumi.interpolate `${clusterName}.${namespace}`,
-        pulumi.interpolate `${clusterName}-pgbouncer`,
-        pulumi.interpolate `${clusterName}-pgbouncer.${namespace}`,
-    ]
+// deploy minio to do backups over S3
+const minioService = new k8s.core.v1.Service("minio", {
+    metadata: {namespace},
+    spec: {
+        selector: {app: "minio"},
+        ports: [{
+            name: "s3",
+            port: 9000
+        }]
+    }
 })
 
-const operator = new PostgresOperator("postgres-operator", {
-    namespace
-}, { dependsOn: [ operatorGroup ], provider });
-
-const pgCluster = new PostgresCluster("postgres-cluster", {
-    clusterName,
-    namespace,
-    storageClass: "local-path",
-    backupStorageClass: "local-path",
-    replicas: {
-        count: 1
-    },
-    tls: {
-        ca: ca.getCertificate(),
-        cert: cert.getCertificate(),
-        key: cert.getPrivateKey()
+new k8s.apps.v1.Deployment("minio", {
+    metadata: { namespace },
+    spec: {
+        selector: {matchLabels: {app: "minio"}},
+        template: {
+            metadata: {labels: {app: "minio"}},
+            spec: {
+                containers: [{
+                    name: "minio",
+                    image: "minio/minio",
+                    args: ["server", "/data"],
+                    lifecycle: {
+                        postStart: {
+                            exec: {
+                                command: ["/bin/mkdir", "-p", "/data/postgres-backup"]
+                            }
+                        }
+                    },
+                    env: [{
+                        name: "MINIO_ROOT_USER",
+                        value: "user"
+                    }, {
+                        name: "MINIO_ROOT_PASSWORD",
+                        value: "password"
+                    }],
+                    ports: [{
+                        name: "s3",
+                        containerPort: 9000,
+                    }]
+                }],
+            }
+        }
     }
-}, { dependsOn: [ operator ], provider });
+});
 
-const psqlProvider = new postgresql.Provider("postgresql", {
-    host: pgCluster.clusterIP,
-    port: 5432,
-    username: "postgres",
-    password: pgCluster.postgresPassword,
-    sslmode: "require"
-}, { dependsOn: [pgCluster]});
+const crds = new postgresOperator.CRDs({ provider });
 
-const db = new postgresql.Database("testdb", {}, { provider: psqlProvider });
+new postgresOperator.Operator("zalando-postgresql-operator", {
+    namespace,
 
-new postgresql.Grant("testdb-grant-user-database-connect-temp", {
-    database: db.name,
-    role: pgCluster.username,
-    objectType: "database",
-    privileges: ["CONNECT", "TEMPORARY"]
-}, { provider: psqlProvider });
+    // enable walg backups to minio every 5 minutes
+    walg: {
+        backupNumToRetain: 14,
+        backupSchedule: "*/5 * * * * *",
+        s3: {
+            bucket: "postgres-backup",
+            accessKeyId: "user",
+            secretAccessKey: "password",
+            endpoint: pulumi.interpolate `http://${minioService.metadata.name}:9000`,
+            disableSSE: true,
+            forcePathStyle: true
+        },
+    },
 
-new postgresql.Grant(`testdb-grant-user-schema-all`, {
-    database: db.name,
-    role: pgCluster.username,
-    schema: "public",
-    objectType: "schema" as string,
-    privileges: ["CREATE", "USAGE"],
-}, { provider: psqlProvider });
+    // enable logical backups to minio every 5 minutes
+    logicalBackup: {
+        backupSchedule: "*/5 * * * *",
+        s3: {
+            bucket: "postgres-backup",
+            region: "test",
+            accessKeyId: "user",
+            secretAccessKey: "password",
+            endpoint: pulumi.interpolate `http://${minioService.metadata.name}:9000`,
+            disableSSE: true,
+        },
+    }
 
-for (const [objectType, privileges] of [
-    ["table", ["UPDATE", "REFERENCES", "TRUNCATE", "SELECT", "DELETE", "TRIGGER", "INSERT"]],
-    ["sequence", ["UPDATE", "SELECT", "USAGE"]],
-    ["function", ["EXECUTE"]],
-]) {
-    new postgresql.DefaultPrivileges(`testdb-default-grant-user-${objectType}-all`, {
-        database: db.name,
-        schema: "public",
-        owner: "postgres",
-        role: pgCluster.username,
-        objectType: objectType as string,
-        privileges: privileges as string[]
-    }, {provider: psqlProvider})
-}
+}, { provider });
 
-new postgresql.Grant("testdb-revoke-public", {
-    database: db.name,
-    role: "public",
-    schema: "public",
-    objectType: "schema",
-    privileges: []
-}, { provider: psqlProvider });
+const userDB = "foo";
 
-export const testdb = db.name;
-export const clusterIP = pgCluster.clusterIP;
-export const postgresPassword = pgCluster.postgresPassword;
-export const username = pgCluster.username;
-export const password = pgCluster.password;
-export const dbname = pgCluster.dbname;
+const psql = new postgresOperator.Postgresql("test-postgresql-cluster", {
+    namespace,
+
+    // provider ca for certificate generation
+    ca,
+
+    // deploy 1 master and 1 replica
+    numberOfInstances: 2,
+
+    // create myuser2 user
+    users: {
+        myuser2: []
+    },
+
+    // create database with myuser2 owner
+    databases: {
+        [userDB]: "myuser2"
+    },
+    preparedDatabases: {
+        bar: {
+            defaultUsers: true,
+            schemas: {
+                public: {
+                    defaultUsers: true,
+                    defaultRoles: false
+                }
+            }
+        }
+    },
+
+    // enable logical backups
+    enableLogicalBackup: true,
+    logicalBackupSchedule: "*/5 * * * *",
+}, { provider, dependsOn: [crds] });
+
+export const host = psql.clusterHost;
+export const adminPassword = psql.roleCredentials.apply(creds => creds.postgres.password);
+export const username = psql.roleCredentials.apply(creds => creds.myuser2.username);
+export const password = psql.roleCredentials.apply(creds => creds.myuser2.password);
+export const db = userDB;
+export const caCert = psql.cert.getCaCertPem();

@@ -7,7 +7,7 @@ import * as request from 'request-promise';
 
 // removes kubernetes resource if it matches condition
 export function removeK8SResourceCondition(condition: (obj: any) => boolean) {
-    return obj => {
+    return (obj: any) => {
         if(condition(obj)) {
             obj.apiVersion = "v1";
             obj.kind = "List";
@@ -79,19 +79,24 @@ export function waitK8SResource<T extends k8sClient.ApiType, R>({
     kind: string,
     provider?: k8s.Provider,
     apiType: ApiConstructor<T>,
-    read: (api: T, name: string, namespace?: string) => Promise<{body: R}> | undefined,
+    read:
+        ((api: T, name: string) => Promise<{body: R} | undefined>) |
+        ((api: T, name: string, namespace: string) => Promise<{body: R} | undefined>),
     resource?: pulumi.Resource
-}): pulumi.Output<R> {
-    const kubeConfig = (provider as any).kubeconfig as pulumi.Output<string>;
+}): pulumi.Output<R | undefined> {
+    const kubeConfig = pulumi.output<pulumi.Output<string>>((provider as any).kubeconfig);
 
     return pulumi.all([kubeConfig, namespace, name, resource]).apply(
         async ([kubeConfig, namespace, name, resource]) => {
             const kc = getKubeconfig(kubeConfig);
             const api = kc.makeApiClient<T>(apiType);
 
+            let counter = 0;
             while (true) {
                 try {
-                    pulumi.log.debug(`Waiting for ${kind} "${namespace}/${name}" ...`, resource);
+                    if (counter > 0) {
+                        pulumi.log.info(`Waiting for ${kind} "${namespace}/${name}" ...`, resource);
+                    }
 
                     let result = await read(api, name, namespace);
 
@@ -108,6 +113,7 @@ export function waitK8SResource<T extends k8sClient.ApiType, R>({
                     pulumi.log.warn(`error requesting k8s ${kind} "${namespace ? `${namespace}/${name}`: name}": ` + err?.message, resource)
                 }
 
+                counter++;
                 await new Promise(r => setTimeout(r, 2000));
             }
         }
@@ -148,39 +154,99 @@ export function waitK8SSecret(
     });
 }
 
-export function waitK8SCustomResourceCondition<T extends k8s.apiextensions.CustomResource>(
-    resource: T,
+export function waitK8SDeployment(
+    namespace: pulumi.Input<string>,
+    name: pulumi.Input<string>,
+    provider: k8s.Provider,
+    resource?: pulumi.Resource
+) {
+    return waitK8SResource({
+        namespace,
+        name,
+        kind: "deployment",
+        provider,
+        resource,
+        apiType: k8sClient.AppsV1Api,
+        read: async (api, name, namespace) => {
+            const result = await api.readNamespacedDeployment(name, namespace);
+
+            // if there are any ready ready replicas, continue
+            if ((result.body.status?.readyReplicas || 0) > 0) {
+                return result;
+            }
+
+            return;
+        }
+    });
+}
+
+interface CustomResource {
+    apiVersion: pulumi.Input<string>;
+    metadata: {
+        namespace?: pulumi.Input<string>;
+        name: pulumi.Input<string>;
+    };
+}
+
+export interface CustomResourceWithBody extends CustomResource {
+    body: pulumi.Output<any>;
+}
+
+export function waitK8SCustomResourceCondition<C extends CustomResource, R extends pulumi.Resource>(
+    customResource: C,
     resourceName: pulumi.Input<string>,
     check: (v: any) => boolean,
-    provider: k8s.Provider
-): T {
-    if (pulumi.runtime.isDryRun()) {
-        return resource;
-    }
+    provider: k8s.Provider,
+    resource?: R,
+): C & {body: pulumi.Output<any>} {
+    const kubeConfig = pulumi.output<pulumi.Output<string>>((provider as any).kubeconfig);
 
-    const kubeConfig = (provider as any).kubeconfig as pulumi.Output<string>;
+    let logResource = resource ? resource : customResource as any as R;
 
-    return pulumi.all([kubeConfig, resource.apiVersion, resourceName, resource.metadata.namespace, resource.metadata.name]).apply(
+    return pulumi.all([kubeConfig, customResource.apiVersion, resourceName, customResource.metadata.namespace, customResource.metadata.name]).apply(
         async ([kubeConfig, apiVersion, resourceName, namespace, name]) => {
             const kc = getKubeconfig(kubeConfig);
+            const server = kc.getCurrentCluster()?.server; 
 
             const opts = { json: true };
             kc.applyToRequest(opts as any);
 
+            let counter = 0;
             while (true) {
                 try {
-                    pulumi.log.debug(`Waiting for ${resourceName} "${namespace}/${name}" ...`, resource);
+                    if (counter > 0) {
+                        pulumi.log.info(`Waiting for ${resourceName} "${namespace ? `${namespace}/` : ""}${name}" ...`, logResource);
+                    }
 
-                    const url = `${kc.getCurrentCluster()?.server}/apis/${apiVersion}/namespaces/${namespace}/${resourceName}/${name}`;
+                    let url: string;
+
+                    // whether resource is namespaced or not
+                    if (namespace) {
+                        url = `${server}/apis/${apiVersion}/namespaces/${namespace}/${resourceName}/${name}`;
+                    } else {
+                        url = `${server}/apis/${apiVersion}/${resourceName}/${name}`;
+                    }
+
                     const body = await request.get(url, opts);
 
+                    pulumi.log.debug(`Resource ${resourceName} "${namespace ? `${namespace}/` : ""}${name}": `+JSON.stringify(body), logResource)
+
+                    // if check passes return result
                     if (check(body)) {
-                        return resource;
+                        return {...customResource, body};
                     }
                 } catch (err) {
-                    pulumi.log.warn(`error requesting ${resourceName} "${namespace}/${name}: ` + err?.message, resource)
+                    // if is dry run assume if error, resource is missing, so ignore it,
+                    // as this is only preview, real values will be resolved later
+                    if (pulumi.runtime.isDryRun()) {
+                        pulumi.log.info(`Error getting resource: ` + err, logResource);
+                        return {...customResource, body: pulumi.output(undefined)};
+                    }
+
+                    pulumi.log.warn(`Error requesting ${resourceName} "${namespace ? `${namespace}/` : ""}${name}: ` + err?.message, logResource)
                 }
 
+                counter ++;
                 await new Promise(r => setTimeout(r, 2000));
             }
         }) as any;

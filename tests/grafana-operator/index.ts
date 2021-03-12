@@ -1,38 +1,30 @@
 import * as k8s from '@pulumi/kubernetes';
+import { tls, grafanaOperator } from '../../';
 
-import { OperatorLifecycleManager, OperatorGroup, RootSigningCertificate, GrafanaOperator, Grafana, PostgresCluster, PostgresOperator } from '../..';
-
-const ca = new RootSigningCertificate("ca", {});
+// const ca = new RootSigningCertificate("ca", {});
 
 const provider = new k8s.Provider("k8s");
 
-const olm = new OperatorLifecycleManager("olm", {}, { provider });
-
 export const namespace = new k8s.core.v1.Namespace("grafana", {}, { provider }).metadata.name;
 
-const operatorGroup = new OperatorGroup("grafana-group", {
-    namespace: namespace,
-    targetNamespaces: [namespace]
-}, { dependsOn: [olm], provider });
+const grafanaOperatorCRDs = new grafanaOperator.CRDs({ provider });
 
-const operator = new GrafanaOperator("grafana-operator", {
+const operator = new grafanaOperator.Operator("grafana-operator", { namespace }, { provider });
+
+// const postgresOperator = new PostgresOperator({
+//     namespace
+// }, { dependsOn: [ operatorGroup ], provider });
+
+// const pgCluster = new PostgresCluster("postgres-cluster", {
+//     clusterName: "postgres",
+//     namespace,
+//     storageClass: "local-path",
+//     backupStorageClass: "local-path",
+// }, { dependsOn: [ postgresOperator ], provider });
+
+const grafana = new grafanaOperator.Grafana({
     namespace
-}, { dependsOn: [operatorGroup], provider });
-
-const postgresOperator = new PostgresOperator("postgres-operator", {
-    namespace
-}, { dependsOn: [ operatorGroup ], provider });
-
-const pgCluster = new PostgresCluster("postgres-cluster", {
-    clusterName: "postgres",
-    namespace,
-    storageClass: "local-path",
-    backupStorageClass: "local-path",
-}, { dependsOn: [ postgresOperator ], provider });
-
-const grafana = new Grafana({
-    namespace
-}, { dependsOn: [operator], provider });
+}, { dependsOn: [grafanaOperatorCRDs], provider });
 
 grafana.newDashboard("simple-dashboard", {
     dashboard: {
@@ -66,20 +58,20 @@ grafana.newDashboard("simple-dashboard", {
     }
 });
 
-grafana.newDataSource("example-datasource", {
-    datasources: [{
-        name: "Postgres",
-        type: "postgres",
-        url: "postgres:5432",
-        database: pgCluster.dbname,
-        user: pgCluster.username,
-        secureJsonData: {
-            password: pgCluster.password
-        },
-        jsonData: {
-            sslmode: "disable",
-            timescaledb: false,
-            postgresVersion: 1200
-        }
-    }]
-});
+// grafana.newDataSource("example-datasource", {
+//     datasources: [{
+//         name: "Postgres",
+//         type: "postgres",
+//         url: "postgres:5432",
+//         database: pgCluster.dbname,
+//         user: pgCluster.username,
+//         secureJsonData: {
+//             password: pgCluster.password
+//         },
+//         jsonData: {
+//             sslmode: "disable",
+//             timescaledb: false,
+//             postgresVersion: 1200
+//         }
+//     }]
+// });
