@@ -108,16 +108,29 @@ interface KafkaArgs {
     authenticationType?: KafkaAuthenticationType;
     authorizationType?: KafkaAuthorizationType;
     storage?: {
+        type?: pulumi.Input<"ephemeral" | "jbod" | "persistent-claim">;
+        class?: pulumi.Input<string>;
         size?: pulumi.Input<string>;
-        class?: pulumi.Input<"ephemeral" | "persistent-claim">;
-        [x: string]: any;
+        sizeLimit?: pulumi.Input<string>;
+        deleteClaim?: pulumi.Input<boolean>;
+        volumes?: pulumi.Input<pulumi.Input<{
+            id: pulumi.Input<number>;
+            type: pulumi.Input<"ephemeral" | "persistent-claim">; 
+            class?: pulumi.Input<string>;
+            size: pulumi.Input<string>;
+            sizeLimit?: pulumi.Input<string>;
+            deleteClaim?: pulumi.Input<boolean>;
+        }>[]>;
     };
     zookeeper?: {
         replicas?: pulumi.Input<number>;
         storage: {
+            type?: pulumi.Input<"ephemeral" | "persistent-claim">;
+            replicas?: pulumi.Input<number>;
+            class?: pulumi.Input<string>;
             size?: pulumi.Input<string>;
-            class?: pulumi.Input<"ephemeral" | "persistent-claim">;
-            [x: string]: any;
+            sizeLimit?: pulumi.Input<string>;
+            deleteClaim?: pulumi.Input<boolean>;
         }
     }
     extraConfig?: object;
@@ -154,14 +167,20 @@ export class Kafka extends pulumi.ComponentResource {
             authenticationType = null,
             authorizationType = null,
             storage = {
-                type: "ephemeral"
+                type: "persistent-claim",
+                size: "1Gi",
+                class: "standard",
+                deleteClaim: true
             },
         } = args;
 
         let {
             replicas: zkReplicas = pulumi.output(replicas).apply(replicas => replicas > 2 ? 3 : 1 || 1),
             storage: zkStorage = {
-                type: "ephemeral"
+                type: "persistent-claim",
+                size: "1Gi",
+                class: "standard",
+                deleteClaim: true
             }
         } = args.zookeeper || {};
 
