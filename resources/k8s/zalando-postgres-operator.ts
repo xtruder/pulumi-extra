@@ -1,9 +1,9 @@
 import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
 import * as random from '@pulumi/random';
-import merge from "ts-deepmerge";
+import deepMerge from "ts-deepmerge";
 
-import { base64Decode, deepMerge, WithRequired } from '../util';
+import { base64Decode, WithRequired } from '../util';
 import { includeK8SResourceParams, removeK8SResourceParams, waitK8SCustomResourceCondition, CustomResourceWithBody, waitK8SSecret } from '../../utils/k8s';
 import { Certificate, RootSigningCertificate } from '../tls';
 
@@ -199,7 +199,7 @@ export class Operator extends pulumi.ComponentResource {
             stringData: podEnvironmentSecretData
         }, { parent: this });
 
-        let values = merge({
+        let values = deepMerge({
             configKubernetes: {
                 pod_environment_configmap: podEnvironmentConfigmap.metadata.name,
                 pod_environment_secret: podEnvironmentSecret.metadata.name
@@ -418,7 +418,7 @@ export class Postgresql extends pulumi.ComponentResource {
             };
         }
 
-        let spec = merge({
+        let spec = deepMerge({
             teamId,
             volume,
             numberOfInstances,

@@ -3,8 +3,8 @@ import { Htpasswd, HtpasswdAlgorithm } from 'pulumi-htpasswd';
 import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
 import * as random from '@pulumi/random';
+import deepMerge from 'ts-deepmerge';
 
-import { deepMerge } from '../util';
 import { Certificate } from '../tls';
 
 export interface DockerRegistryUser {
