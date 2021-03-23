@@ -1,5 +1,5 @@
 node_modules
-Pulumi.*test.yaml
+Pulumi.*.yaml
 .direnv
 .pulumi
 telepresence.log

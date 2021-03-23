@@ -205,13 +205,6 @@ grafana.newDashboard("trades", {
     customFolderName: "trading"
 });
 
-// const consumeJobUserPropertiesSecret = new k8s.core.v1.Secret("kafka-consume-job-admin-properties", {
-//     metadata: { namespace },
-//     stringData: {
-//         "client.properties": userProperties
-//     }
-// });
-
 export { namespace };
 
 export const kafkaClusterName = kafka.name;
