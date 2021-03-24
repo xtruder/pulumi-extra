@@ -32,7 +32,7 @@ export class CRDs extends pulumi.ComponentResource {
 }
 
 /**
- * GrafanaArgs defines Operator arguments
+ * OperatorArgs defines Operator arguments
  */
 interface OperatorArgs {
     /**
