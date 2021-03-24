@@ -1,0 +1,4 @@
+name: knative-test
+description: test for knative and associated resources
+runtime: nodejs
+template:
