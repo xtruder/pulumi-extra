@@ -448,7 +448,7 @@ export class Postgresql extends pulumi.ComponentResource {
         }, {parent: this});
 
         // wait for postgresql to be running
-        this.postgresql = waitK8SCustomResourceCondition(psql, "postgresqls", resource => {
+        this.postgresql = waitK8SCustomResourceCondition(psql, resource => {
             return resource?.status?.PostgresClusterStatus == "Running";
         }, opts.provider);
 

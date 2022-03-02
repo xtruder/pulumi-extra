@@ -1,5 +1,4 @@
 import * as pulumi from '@pulumi/pulumi';
-import * as equal from 'deep-equal';
 
 export function check<A>(expected: A | ((T) => boolean), resource?: pulumi.Resource) {
     return function (value: any) {
@@ -10,7 +9,7 @@ export function check<A>(expected: A | ((T) => boolean), resource?: pulumi.Resou
             return;
         }
 
-        if (!equal(value, expected)) {
+        if (JSON.stringify(value) !== JSON.stringify(expected)) {
             pulumi.log.error(`assertion error: ${JSON.stringify(value)} != ${JSON.stringify(expected)}`, resource)
         }
     };

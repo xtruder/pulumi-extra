@@ -206,7 +206,6 @@ export class Registry extends pulumi.ComponentResource {
                     }
                 }
             }, {...defaultResourceOptions, deleteBeforeReplace: true}),
-            "apicurioregistries",
             resource => {
                 if (resource?.status?.replicaCount > 0 && resource?.status?.serviceName) {
                     return true

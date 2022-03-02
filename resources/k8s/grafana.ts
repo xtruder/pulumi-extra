@@ -188,7 +188,7 @@ export class Grafana extends pulumi.ComponentResource {
             spec
         }, {...defaultResourceOptions, deleteBeforeReplace: true});
 
-        this.grafana = waitK8SCustomResourceCondition(grafana, "grafanas", resource => {
+        this.grafana = waitK8SCustomResourceCondition(grafana, resource => {
             return resource?.status?.message == "success";
         }, opts.provider);
     }

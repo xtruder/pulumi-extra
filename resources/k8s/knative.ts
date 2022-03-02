@@ -1,12 +1,15 @@
 import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
+import { waitK8SCustomResourceCondition, CustomResource, removeK8SResourceParams } from '../../utils/k8s';
 
 const
     version = "v0.21.0",
     servingCoreYAML = `https://github.com/knative/serving/releases/download/${version}/serving-core.yaml`,
     eventingCoreYAML = `https://github.com/knative/eventing/releases/download/${version}/eventing-core.yaml`,
     kourierYAML = `https://github.com/knative/net-kourier/releases/download/${version}/kourier.yaml`,
-    servingDefaultDomain = `https://github.com/knative/serving/releases/download/${version}/serving-default-domain.yaml`;
+    servingDefaultDomain = `https://github.com/knative/serving/releases/download/${version}/serving-default-domain.yaml`,
+    inMemoryChannelYAML = `https://github.com/knative/eventing/releases/download/${version}/in-memory-channel.yaml`,
+    mtChannelBrokerYAML = `https://github.com/knative/eventing/releases/download/${version}/mt-channel-broker.yaml`;
 
 function transformConfigs(configs: Record<string, pulumi.Input<any>>) {
     const camalize = (str: string) =>
@@ -15,7 +18,7 @@ function transformConfigs(configs: Record<string, pulumi.Input<any>>) {
     return (resource: any) => {
         if (resource.kind == "ConfigMap") {
             let normalized = camalize((resource.metadata.name as string).replace("config-", ""));
-            if (normalized in configs) {
+            if (normalized in configs && configs[normalized]) {
                 resource.data = configs[normalized];
             }
         }
@@ -41,6 +44,12 @@ type ServingConfig = {
 
 type EventingConfig = {
     enable?: pulumi.Input<boolean>;
+    inMemoryChannel?: {
+        enable?: pulumi.Input<boolean>;
+    };
+    mtChannelBroker?: {
+        enable?: pulumi.Input<boolean>;
+    };
 
     brDefaultChannel?: ConfigEntries;
     brDefaults?: ConfigEntries;
@@ -66,16 +75,21 @@ export class Knative extends pulumi.ComponentResource {
         super("pulumi-extra:k8s:Knative", "knative", {}, opts);
 
         let {
-            serving = {
-                defaultDomain: true
+            serving = {},
+            eventing = {
+                // eventing is disabled by default
+                enable: false
             },
-            eventing = {},
             kourier = {
                 enable: true
             }
         } = args || {};
 
-        pulumi.all(serving).apply((serving: pulumi.UnwrappedObject<ServingConfig>) => {
+        let servingCore = pulumi.all(serving).apply((serving: pulumi.UnwrappedObject<ServingConfig>) => {
+            let {
+                defaultDomain = true
+            } = serving;
+
             // if kourier is enabled set ingress.class for serving to kourier
             if (kourier.enable) {
                 serving.network = {
@@ -85,19 +99,21 @@ export class Knative extends pulumi.ComponentResource {
             }
 
             // provision knative serving core
-            new k8s.yaml.ConfigFile("knative-serving-core", {
+            let servingCore = new k8s.yaml.ConfigFile("knative-serving-core", {
                 file: servingCoreYAML,
                 transformations: [
                     transformConfigs(serving)
                 ]
             }, { parent: this });
 
-            if (serving.defaultDomain) {
+            if (defaultDomain) {
                 // provision knative default domain
                 new k8s.yaml.ConfigFile("knative-serving-default-domain", {
                     file: servingDefaultDomain
-                }, { parent: this });
+                }, { parent: this, dependsOn: [servingCore] });
             }
+
+            return servingCore;
         });
 
         pulumi.all(eventing).apply((eventing: EventingConfig) => {
@@ -105,13 +121,34 @@ export class Knative extends pulumi.ComponentResource {
                 return;
             }
 
+            let {
+                inMemoryChannel = {
+                    enable: true
+                },
+                mtChannelBroker = {
+                    enable: true
+                }
+            } = eventing;
+
             // provision knative eventing core
-            new k8s.yaml.ConfigFile("knative-eventing-core", {
+            const eventingCore = new k8s.yaml.ConfigFile("knative-eventing-core", {
                 file: eventingCoreYAML,
                 transformations: [
                     transformConfigs(serving)
                 ]
-            }, { parent: this });
+            }, { parent: this, dependsOn: [servingCore] });
+
+            if (inMemoryChannel.enable) {
+                new k8s.yaml.ConfigFile("knative-eventing-inmemory-channel", {
+                    file: inMemoryChannelYAML,
+                }, { parent: this, dependsOn: [eventingCore] });
+            }
+
+            if (mtChannelBroker.enable) {
+                new k8s.yaml.ConfigFile("knative-eventing-mt-channel-broker", {
+                    file: mtChannelBrokerYAML,
+                }, { parent: this, dependsOn: [eventingCore] });
+            }
         });
 
         pulumi.all(kourier).apply((kourier: KourierConfig) => {
@@ -124,4 +161,16 @@ export class Knative extends pulumi.ComponentResource {
             }, { parent: this });
         });
     }
+}
+
+export function waitReady<T extends CustomResource>(service: T, provider: k8s.Provider) {
+    return waitK8SCustomResourceCondition(service, (resource) => {
+        for (const condition of resource?.status?.conditions || []) {
+            if (condition?.type == "Ready" && condition?.status == "True") {
+                return true;
+            }
+        }
+
+        return false;
+    }, provider);
 }

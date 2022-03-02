@@ -1,0 +1,4 @@
+name: keycloak-operator-test
+description: test for keycloak operator and associated resources
+runtime: nodejs
+template:

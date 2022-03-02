@@ -245,7 +245,7 @@ export class Kafka extends pulumi.ComponentResource {
                 namespace,
             },
             spec
-        }, { parent: this }), "kafkas", isReady, opts.provider);
+        }, { parent: this }), isReady, opts.provider);
 
         this.customResource = kafka;
         this.name = kafka.metadata.name;
@@ -471,7 +471,7 @@ export class KafkaTopic extends pulumi.ComponentResource {
                 }
             },
             spec
-        }, { parent: this, deleteBeforeReplace: true }), "kafkatopics", isReady, opts.provider);
+        }, { parent: this, deleteBeforeReplace: true }), isReady, opts.provider);
 
         this.customResource = topic;
         this.name = topic.metadata.name;
@@ -545,7 +545,7 @@ export class KafkaUser extends pulumi.ComponentResource {
                 }
             },
             spec
-        }, { parent: this, deleteBeforeReplace: true }), "kafkausers", isReady, opts.provider);
+        }, { parent: this, deleteBeforeReplace: true }), isReady, opts.provider);
 
         this.customResource = user;
         this.name = user.metadata.name;
@@ -661,7 +661,7 @@ export class KafkaConnect extends pulumi.ComponentResource {
             spec
         }, { parent: this });
 
-        this.customResource = waitK8SCustomResourceCondition(connect, "kafkaconnects", isReady, opts.provider);
+        this.customResource = waitK8SCustomResourceCondition(connect, isReady, opts.provider);
         this.namespace = pulumi.output(namespace);
         this.name = this.customResource.metadata.name;
     }
@@ -786,7 +786,7 @@ export class KafkaConnector extends pulumi.ComponentResource {
             }
         }, { parent: this });
 
-        this.customResource = waitK8SCustomResourceCondition(connector, "kafkaconnectors", isReady, opts.provider);
+        this.customResource = waitK8SCustomResourceCondition(connector, isReady, opts.provider);
     }
 }
 

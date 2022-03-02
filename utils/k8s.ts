@@ -180,8 +180,9 @@ export function waitK8SDeployment(
     });
 }
 
-interface CustomResource {
+export interface CustomResource {
     apiVersion: pulumi.Input<string>;
+    kind: pulumi.Input<string>;
     metadata: {
         namespace?: pulumi.Input<string>;
         name: pulumi.Input<string>;
@@ -194,7 +195,6 @@ export interface CustomResourceWithBody extends CustomResource {
 
 export function waitK8SCustomResourceCondition<C extends CustomResource, R extends pulumi.Resource>(
     customResource: C,
-    resourceName: pulumi.Input<string>,
     check: (v: any) => boolean,
     provider: k8s.Provider,
     resource?: R,
@@ -203,19 +203,34 @@ export function waitK8SCustomResourceCondition<C extends CustomResource, R exten
 
     let logResource = resource ? resource : customResource as any as R;
 
-    return pulumi.all([kubeConfig, customResource.apiVersion, resourceName, customResource.metadata.namespace, customResource.metadata.name]).apply(
-        async ([kubeConfig, apiVersion, resourceName, namespace, name]) => {
+    return pulumi.all([kubeConfig, customResource.apiVersion, customResource.kind, customResource.metadata.namespace, customResource.metadata.name]).apply(
+        async ([kubeConfig, apiVersion, kind, namespace, name]) => {
             const kc = getKubeconfig(kubeConfig);
             const server = kc.getCurrentCluster()?.server; 
 
             const opts = { json: true };
             kc.applyToRequest(opts as any);
 
+            const apis = kc.makeApiClient(k8sClient.ApisApi);
+
+            let resourceName: string | undefined;
             let counter = 0;
             while (true) {
                 try {
                     if (counter > 0) {
                         pulumi.log.info(`Waiting for ${resourceName} "${namespace ? `${namespace}/` : ""}${name}" ...`, logResource);
+                    }
+
+                    // try to get pluralized resource name from /apis/<api_version>
+                    if (!resourceName) {
+                        const apiResouces = await request.get(`${server}/apis/${apiVersion}`, opts);
+
+                        resourceName = apiResouces.resources.
+                            find((resource: any) => resource.kind == kind)?.name;
+
+                        if (!resourceName) {
+                            throw new Error("Unknown resource type");
+                        }
                     }
 
                     let url: string;
