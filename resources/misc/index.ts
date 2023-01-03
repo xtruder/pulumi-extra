@@ -1,2 +1,2 @@
 export * from "./tls";
-export * from "./cachix-deploy"
+export * from "./nixos-cachix-deploy";
