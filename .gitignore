@@ -1,5 +1,9 @@
+# nodejs
 node_modules
+
+# pulumi
 Pulumi.*.yaml
-.direnv
 .pulumi
-telepresence.log
+
+# nix
+.direnv

@@ -1,4 +1,0 @@
-name: kafka-postgresql-grafana-test
-description: tests kafka postgresql and grafana integration
-runtime: nodejs
-template:

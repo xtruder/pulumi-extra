@@ -1,4 +1,0 @@
-name: apicurio-registry
-description: test for apicurio registry operator and associated resources
-runtime: nodejs
-template:

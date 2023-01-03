@@ -1,15 +1,16 @@
-FROM xtruder/debian-nix-devcontainer:flakes
+FROM ghcr.io/xtruder/nix-devcontainer:v1
 
-RUN sudo apt-get install -y iptables fuse3
+# cache /nix
+VOLUME /nix
 
-# create volume for pulumi
-RUN sudo -u user mkdir -p /home/${USERNAME}/.pulumi
+# create volume for pulumi config
+RUN mkdir -p /home/${USERNAME}/.pulumi
 VOLUME /home/${USERNAME}/.pulumi
 
-# create volume for minikube
-RUN sudo -u user mkdir -p /home/${USERNAME}/.minikube
-VOLUME /home/${USERNAME}/.minikube
-
-# create volume for pulumi
-RUN sudo -u user mkdir -p /home/${USERNAME}/.kube
+# create volume for kubeconfig
+RUN mkdir -p /home/${USERNAME}/.kube
 VOLUME /home/${USERNAME}/.kube
+
+# create volume for minikube state
+RUN mkdir -p /home/${USERNAME}/.minikube
+VOLUME /home/${USERNAME}/.minikube

@@ -2,34 +2,27 @@
     description = "pulumi-extra";
 
     inputs = {
-      nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+      nixpkgs.url = "github:nixos/nixpkgs/nixos-22.11";
+      flake-utils.url = "github:numtide/flake-utils";
     };
 
-    outputs = { self, nixpkgs }: let
+    outputs = { self, nixpkgs, flake-utils }: flake-utils.lib.eachDefaultSystem (system: let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
       crd2pulumi = pkgs.buildGoModule rec {
         pname = "crd2pulumi";
-        version = "v1.0.5";
+        version = "v1.2.3";
         src = pkgs.fetchurl {
           url = "https://github.com/pulumi/crd2pulumi/archive/refs/tags/${version}.tar.gz";
-          sha256 = "sha256-RkRCO8brf82UDPPyF+ms105SYBpkBLMGB/zOeuBOcFg=";
+          sha256 = "sha256-SoqahJLe72IppOzUjKGxcU83FUi2u6dw+vU+gfXCHFk=";
         };
-        vendorSha256 = "sha256-eoWKtF/jzY8/2x94KKEsRoMQC6H+04n6Rj4wVkigNpg=";
+        vendorSha256 = "sha256-QnmqhXfE/999i+idAZbREMzNi62164uq5nGKb1nauwk=";
+        doCheck = false;
       };
 
-      k8split = pkgs.buildGoModule rec {
-        pname = "k8split";
-        version = "7469c282";
-        src = pkgs.fetchurl {
-          url = "https://github.com/brendanjryan/k8split/archive/7469c282.tar.gz";
-          sha256 = "sha256-dsuQcpy686btgfnOi6tPdoyRVljtzhrA1rHfAmA2HTY=";
-        };
-        vendorSha256 = "sha256-L0CdTy6dIpamnnNech078NWApafoVjjjyM83Cv5lbUo=";
-      };
     in {
-      devShell.${system} = pkgs.mkShell {
+      devShells.default = pkgs.mkShell {
         buildInputs = with pkgs; [
           pulumi-bin
           kubectl
@@ -41,25 +34,21 @@
           minikube
           docker-machine-kvm2
           kubernetes-helm
-          (confluent-platform.overrideDerivation (p: {
-            version = "6.1.0";
-            src = pkgs.fetchurl {
-              url = "https://packages.confluent.io/archive/6.1/confluent-community-6.1.0.tar.gz";
-              sha256 = "sha256-U7Di8IxM/FUIf6XJEgphTvBNMG227DvNdxD4nwU1U1U=";
-            };
-          }))
           netcat
           crd2pulumi
-          k8split
+          qemu_kvm
         ];
 
         shellHook = ''
           export PULUMI_CONFIG_PASSPHRASE=""
+
+          export MINIKUBE_DRIVER=qemu
+          export MINIKUBE_QEMU_FIRMWARE_PATH=${pkgs.qemu_kvm}/share/qemu/edk2-x86_64-code.fd
 
           if minikube docker-env > /dev/null; then
             eval "$(minikube docker-env)"
           fi
         '';
       };
-    };
+    });
 }

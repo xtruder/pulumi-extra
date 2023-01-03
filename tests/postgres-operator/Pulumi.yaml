@@ -1,4 +1,0 @@
-name: zalando-postgres-operator-test
-description: test zalando postgres operator and associated resources
-runtime: nodejs
-template:

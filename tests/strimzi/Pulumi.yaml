@@ -1,4 +1,0 @@
-name: strimzi-test
-description: test for strimzi operator and associated resources
-runtime: nodejs
-template:

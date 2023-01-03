@@ -1,4 +1,0 @@
-name: docker-registry-test
-description: test for docker registry
-runtime: nodejs
-template:

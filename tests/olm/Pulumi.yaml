@@ -1,4 +1,0 @@
-name: olm-test
-description: test for operator lifecycle manager and associated resources
-runtime: nodejs
-template:
